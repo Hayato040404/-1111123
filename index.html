@@ -1,374 +1,346 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <title>EWC台風進路図</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <style>
-    html, body { margin:0; padding:0; height:100%; width:100%; overflow:hidden; background:#000; font-family:"Noto Sans JP",sans-serif; }
-    #map { position:absolute; top:0; left:0; width:100%; height:100%; }
-    #infobox {
-      position:absolute; top:0; right:0; bottom:0; width:300px;
-      background:#111; color:#fff; padding:15px; z-index:999; font-size:20px;
-      border-left:2px solid #ff6c00; box-sizing:border-box; overflow-y:auto;
-    }
-    #infobox h2 { font-size:22px; margin:0 0 12px 0; border-bottom:1px solid #444; padding-bottom:8px; }
-    #titlebox {
-      position:absolute; top:0; left:0; background:rgba(17,17,17,0.9); color:#fff;
-      padding:10px 16px; z-index:1000; font-size:20px; font-weight:700;
-      border-right:2px solid #ff6c00; border-bottom:2px solid #ff6c00; border-radius:0 0 8px 0;
-      display:none;
-    }
-    .info-item{ margin-bottom:12px; border-left:4px solid #ff6c00; padding-left:8px; }
-    .leaflet_datetext { color:white; font-size:12px; font-weight:700; text-shadow:1px 1px 2px #000; }
-    #typhoon-selector-container { position:absolute; bottom:18px; left:10px; z-index:1000; width:320px; }
-    #typhoon-selector { width:100%; padding:8px; background:#333; color:#fff; border:1px solid #555; border-radius:6px; font-size:15px; }
-    /* simple context menu */
-    #context-menu { position:absolute; background:rgba(30,30,30,0.95); border:1px solid #ff6c00; border-radius:6px; padding:6px 0; z-index:1001; box-shadow:0 2px 10px rgba(0,0,0,0.5); }
-    .context-menu-item{ padding:8px 18px; color:#fff; cursor:pointer; font-size:14px; }
-    .context-menu-item:hover{ background:#ff6c00; }
-    .context-menu-separator{ border-top:1px solid #555; margin:6px 0; }
-  </style>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<title>CloverPit-like — Major Spin Upgrade (fixed)</title>
+<style>
+  :root{--bg:#0b0b0f;--panel:#0f1114;--accent:#e6b422;--accent-2:#ffd66b;--muted:#9aa0a6;--hit:#ff5bf0}
+  *{box-sizing:border-box;font-family:Inter,system-ui,Roboto,'Hiragino Kaku Gothic ProN',Meiryo,Arial}
+  html,body{height:100%}
+  body{margin:0;background:radial-gradient(circle at 10% 10%, #14141a 0%, #07070a 40%, #050507 100%);color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:12px}
+  .wrap{width:1100px;max-width:100%;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:14px;padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.7);border:1px solid rgba(255,255,255,0.03)}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  h1{margin:0;font-size:20px}
+  .hud{display:flex;gap:8px;margin-left:auto;align-items:center}
+  .stat{background:linear-gradient(180deg,#0c0c0c,#0a0a0a);padding:8px 10px;border-radius:10px;font-size:13px;border:1px solid rgba(255,255,255,0.02)}
+
+  .game{display:flex;gap:14px}
+  .left{flex:1}
+  .machine{background:linear-gradient(180deg,#0b0b0f,#111217);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.03)}
+  .board{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;justify-content:center;padding:10px}
+  .cell{aspect-ratio: 4 / 3; background:linear-gradient(180deg,#070709,#0d0d10);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;border:2px solid rgba(255,255,255,.03);position:relative;overflow:hidden;touch-action:manipulation}
+  .cell .glow{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .35s}
+  .cell.win .glow{opacity:0.95;background:linear-gradient(90deg,rgba(230,180,34,.12),rgba(255,255,255,.03));outline:4px solid var(--hit)}
+  .cell.selected{outline:3px solid rgba(230,180,34,.18);box-shadow:0 6px 18px rgba(230,180,34,.04)}
+  .controls{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
+  button{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700}
+  button.ghost{background:transparent;border:1px solid rgba(255,255,255,.06)}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  .right{width:360px}
+  .panel{background:linear-gradient(180deg,#0b0b0d,#0c0c0e);padding:12px;border-radius:10px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.02)}
+  .list{display:flex;flex-direction:column;gap:8px}
+  .charm{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:6px;background:rgba(255,255,255,.02)}
+  small{color:var(--muted)}
+  footer{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}
+
+  .flash{animation:flash .45s ease-in-out}
+  @keyframes flash{0%{transform:scale(1)}50%{transform:scale(1.03)}100%{transform:scale(1)}}
+  .big{font-size:16px;font-weight:800}
+  .muted{color:var(--muted)}
+
+  /* big gain overlay */
+  .gainOverlay{position:fixed;left:50%;top:24%;transform:translateX(-50%);background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:8px;font-size:34px;font-weight:900;color:var(--accent-2);border:3px solid #111;z-index:200;opacity:0;pointer-events:none;transition:opacity .45s,transform .45s}
+  .gainOverlay.show{opacity:1;transform:translateX(-50%) translateY(-10px)}
+
+  /* header small HUD for spins left */
+  .topHud{position:fixed;left:20px;top:20px;background:rgba(0,0,0,0.6);padding:12px;border-radius:6px;color:#fff;z-index:150;border:2px solid rgba(255,255,255,0.04);min-width:120px}
+  .topHud .bigN{font-size:18px;font-weight:900}
+
+  /* responsive */
+  @media (max-width:900px){
+    .game{flex-direction:column}
+    .right{width:100%}
+    .board{grid-template-columns:repeat(5,calc((100vw - 60px)/5));gap:6px}
+    .wrap{padding:10px}
+    .hud{flex-wrap:wrap}
+  }
+</style>
 </head>
 <body>
-  <div id="map"></div>
-  <div id="titlebox"></div>
+<div class="topHud">
+  <div class="bigN" id="topCoins">200 Φ</div>
+  <div>SPINS LEFT: <span id="topSpins">0</span></div>
+</div>
 
-  <div id="infobox">
-    <h2>🌀 EWC台風情報</h2>
-    <div class="info-item"><span>実況時刻:</span><span id="time">-</span></div>
-    <div class="info-item"><span>中心気圧:</span><span id="pressure">-</span></div>
-    <div class="info-item"><span>最大風速:</span><span id="wind">-</span></div>
-    <div class="info-item"><span>最大瞬間風速:</span><span id="gust">-</span></div>
-    <div class="info-item"><span>移動方向:</span><span id="direction">-</span></div>
-    <div class="info-item"><span>移動速度:</span><span id="speed">-</span></div>
-    <div class="info-item"><span>中心位置:</span><span id="location">-</span></div>
+<div class="gainOverlay" id="gainOverlay">+0 Φ</div>
+
+<div class="wrap">
+  <header>
+    <h1>🍀 CloverPit-ish — Spin Upgrade (fixed)</h1>
+    <div class="hud">
+      <div class="stat">💰 <span id="coins">200</span></div>
+      <div class="stat">🎟️ <span id="tickets">3</span></div>
+      <div class="stat">📉 <span id="debt">80</span></div>
+    </div>
+  </header>
+
+  <div class="game">
+    <div class="left">
+      <div class="machine">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <div><small class="muted">スピン数を選んでSPIN。クリックでセル選択→リロール。</small></div>
+          <div><small class="muted">スペース: スピン</small></div>
+        </div>
+
+        <div class="board" id="board"></div>
+
+        <div class="controls">
+          <label class="muted">スピン数:
+            <select id="spinChoice">
+              <option value="3">3 スピン (安全)</option>
+              <option value="7">7 スピン (ハイリスク)</option>
+            </select>
+          </label>
+          <label class="muted">ベット: <input id="betInput" type="number" min="1" value="10" style="width:80px;padding:6px;border-radius:6px;border:none"></label>
+          <button id="spinBtn">SPIN</button>
+          <button id="stopBtn" class="ghost" disabled>STOP</button>
+          <button id="autoResolve" class="ghost">全スピン解決</button>
+          <button id="rerollBtn" class="ghost">選択をリロール（1T/セル）</button>
+          <button id="rerollAllBtn" class="ghost">盤面をリロール（3T）</button>
+          <div style="margin-left:auto;text-align:right">
+            <div class="muted">ATM目標: <strong id="atmTarget">--</strong></div>
+            <div class="muted">残りスピン: <strong id="spinsLeft">-</strong></div>
+          </div>
+        </div>
+
+        <div id="message" class="panel" style="margin-top:12px;display:none"></div>
+      </div>
+
+      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+        <div class="panel" style="flex:1;min-width:220px">
+          <strong>ラウンド / ATM</strong>
+          <div style="margin-top:8px">ラウンド開始時にATM目標がランダムで決まります。目標を満たすか、借金を返せれば次ラウンドへ。</div>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button id="payATM">ATMに全額支払う</button>
+            <button id="partialPay" class="ghost">一部支払い</button>
+          </div>
+        </div>
+
+        <div class="panel" style="width:320px;min-width:200px">
+          <strong>操作 / セーブ</strong>
+          <div style="margin-top:8px"><small class="muted">ショップはチケットで購入。リロールやチャームを駆使して進めよう。</small></div>
+          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
+            <button id="saveBtn">セーブ</button>
+            <button id="loadBtn">ロード</button>
+            <button id="nextRound" class="ghost">次ラウンド開始</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <aside class="right">
+      <div class="panel">
+        <strong>ショップ（チケットで購入）</strong>
+        <div class="list" id="shop"></div>
+      </div>
+
+      <div class="panel">
+        <strong>チャーム（チケットで購入）</strong>
+        <div class="list" id="charms"></div>
+      </div>
+
+      <div class="panel">
+        <strong>履歴 / 情報</strong>
+        <div id="history" style="max-height:220px;overflow:auto;font-size:13px;margin-top:8px"></div>
+      </div>
+
+    </aside>
   </div>
 
-  <div id="typhoon-selector-container"></div>
+  <footer>このHTMLはCloverPitのスピン演出をより本家に寄せた拡張版です。</footer>
+</div>
 
 <script>
-/* ============================
-   地図初期化
-   ============================ */
-const map = L.map('map', {
-  center: [36.65, 138.18],
-  zoom: 5,
-  zoomControl: false,
-  scrollWheelZoom: true,
-  zoomSnap: 0.1,
-  zoomDelta: 0.1
-});
-L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-  attribution: '© OpenStreetMap contributors © CartoDB',
-  subdomains: 'abcd',
-  maxZoom: 19
-}).addTo(map);
+// ----- 基本定義 -----
+const COLS = 5, ROWS = 3;
+const SYMBOLS = ['🍒','🍋','🔔','💎','7️⃣','⭐','🍀'];
+const BASE_VALUES = { '🍒': 10, '🍋': 12, '🔔': 25, '💎': 80, '7️⃣': 60, '⭐': 8, '🍀': 30 };
 
-const allList = L.layerGroup().addTo(map);
-const textList = L.layerGroup().addTo(map);
+let state = {
+  coins: 200,
+  tickets: 3,
+  debt: 80,
+  bet: 10,
+  spinsChosen: 3,
+  spinsLeft: 0,
+  atmTarget: 0,
+  charms: [
+    {id:'luck',name:'Luck',desc:'勝利時の配当+20%',cost:2,owned:false},
+    {id:'precision',name:'Precision',desc:'高レアの出現率↑（軽度）',cost:2,owned:false},
+    {id:'interest',name:'Piggy',desc:'ラウンド終了時の残高に小さな利子を付与',cost:1,owned:false},
+    {id:'shield',name:'Shield',desc:'借金急増を一度だけ防ぐ',cost:3,owned:false}
+  ],
+  shop: [
+    {id:'reroll_token',name:'リロールトークン',desc:'選択セルをチケットでリロール可能',price:0,oneTime:false},
+    {id:'extra_ticket',name:'チケット+1',desc:'チケットを+1する即時アイテム',price:2,oneTime:true}
+  ]
+};
 
-/* ============================
-   補助関数
-   ============================ */
-// URL クエリ (例: ?19) から数字を取り出す。数字のみなら返す（数値型）、そうでなければ null
-function getQueryTyphoonNumber() {
-  const q = (window.location.search || '').replace('?', '').trim();
-  if (/^\d+$/.test(q)) return parseInt(q, 10);
-  return null;
-}
-// typhoonNumber フィールド（例: "2519"）の「短縮番号」を返す（例 => 19）
-function shortTyphoonNumber(typhoonNumber) {
-  if (!typhoonNumber && typhoonNumber !== 0) return '';
-  const s = String(typhoonNumber);
-  // 末尾2桁を短縮番号として扱う（例"2519" -> "19"）
-  return s.length <= 2 ? s : s.slice(-2);
-}
-// 安全にテキストをエスケープして innerHTML に入れる場合に使う
-function escapeHtml(str) {
-  if (str === null || str === undefined) return '';
-  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
-}
+// DOM
+const boardEl = document.getElementById('board');
+const coinsEl = document.getElementById('coins');
+const ticketsEl = document.getElementById('tickets');
+const debtEl = document.getElementById('debt');
+const topCoinsEl = document.getElementById('topCoins');
+const topSpinsEl = document.getElementById('topSpins');
+const spinChoice = document.getElementById('spinChoice');
+const spinBtn = document.getElementById('spinBtn');
+const stopBtn = document.getElementById('stopBtn');
+const autoResolve = document.getElementById('autoResolve');
+const betInput = document.getElementById('betInput');
+const atmTargetEl = document.getElementById('atmTarget');
+const spinsLeftEl = document.getElementById('spinsLeft');
+const messageEl = document.getElementById('message');
+const charmsContainer = document.getElementById('charms');
+const shopEl = document.getElementById('shop');
+const historyEl = document.getElementById('history');
+const payATM = document.getElementById('payATM');
+const partialPay = document.getElementById('partialPay');
+const saveBtn = document.getElementById('saveBtn');
+const loadBtn = document.getElementById('loadBtn');
+const nextRoundBtn = document.getElementById('nextRound');
+const rerollBtn = document.getElementById('rerollBtn');
+const rerollAllBtn = document.getElementById('rerollAllBtn');
+const gainOverlay = document.getElementById('gainOverlay');
 
-/* ============================
-   台風描画処理（元コードを流用）
-   引数: forecast(jsonArray), spec(jsonArray)
-   ============================ */
-function drawTyphoon(forecast, spec) {
-  allList.clearLayers();
-  textList.clearLayers();
+let cells = []; // DOM elements
+let gridSymbols = []; // symbols
+let selectedCells = new Set();
 
-  const titleBox = document.getElementById("titlebox");
+// spinning machinery
+let spinIntervals = Array(COLS).fill(null);
+let scheduledStops = Array(COLS).fill(null);
+let stopTimeouts = Array(COLS).fill(null);
+let spinningFlag = false;
+let stopRequested = false;
 
-  if (!Array.isArray(forecast) || forecast.length < 2 || !Array.isArray(spec) || spec.length < 1) {
-    titleBox.style.display = 'none';
-    document.querySelector("#infobox h2").textContent = "台風情報なし";
-    document.getElementById("time").textContent = "-";
-    document.getElementById("pressure").textContent = "-";
-    document.getElementById("wind").textContent = "-";
-    document.getElementById("gust").textContent = "-";
-    document.getElementById("direction").textContent = "-";
-    document.getElementById("speed").textContent = "-";
-    document.getElementById("location").textContent = "-";
-    return;
+// Audio context
+let audioCtx = null;
+function initAudio(){ if(audioCtx) return; audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+function playTone(frequency, time=0.08){ try{ initAudio(); const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.type = 'sine'; o.frequency.value = frequency; g.gain.value = 0.08; o.connect(g); g.connect(audioCtx.destination); o.start(); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + time); setTimeout(()=>o.stop(), time*1000 + 20); }catch(e){} }
+
+// ----- message box (fixed) -----
+function messageBox(txt, timeout = 3000){ if(!messageEl) return; messageEl.style.display = 'block'; messageEl.textContent = txt; if(messageBox._timer) clearTimeout(messageBox._timer); messageBox._timer = setTimeout(()=>{ try{ messageEl.style.display = 'none'; }catch(e){} }, timeout); }
+
+// ----- 初期化ボード -----
+function initBoard(){ boardEl.innerHTML=''; cells=[]; gridSymbols=[]; for(let r=0;r<ROWS;r++){ const rowEls=[]; const rowSyms=[]; for(let c=0;c<COLS;c++){ const el = document.createElement('div'); el.className='cell'; el.innerHTML = '<div class="glow"></div><div class="sym">-</div>'; el.addEventListener('click', ()=>toggleCellSelection(r,c)); el.addEventListener('touchstart', (ev)=>{ ev.preventDefault(); toggleCellSelection(r,c); }); boardEl.appendChild(el); rowEls.push(el); rowSyms.push('-'); } cells.push(rowEls); gridSymbols.push(rowSyms); } }
+
+function renderHUD(){ document.getElementById('coins').textContent = state.coins; document.getElementById('tickets').textContent = state.tickets; document.getElementById('debt').textContent = state.debt; topCoinsEl.textContent = state.coins + ' Φ'; topSpinsEl.textContent = state.spinsLeft; atmTargetEl.textContent = state.atmTarget; spinsLeftEl.textContent = state.spinsLeft; }
+function log(msg){ const d = document.createElement('div'); d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`; historyEl.prepend(d); }
+
+// ----- charms & shop -----
+function renderCharms(){ charmsContainer.innerHTML=''; state.charms.forEach(c=>{ const wrap=document.createElement('div'); wrap.className='charm'; const info=document.createElement('div'); const name=document.createElement('strong'); name.textContent=c.name; const desc=document.createElement('div'); desc.style.fontSize='12px'; desc.style.color='var(--muted)'; desc.textContent=c.desc; info.appendChild(name); info.appendChild(desc); const right=document.createElement('div'); if(c.owned){ const btn=document.createElement('button'); btn.textContent='解除'; btn.addEventListener('click', ()=>{ c.owned=false; renderCharms(); renderHUD(); log(c.name+' を解除'); }); right.appendChild(btn); } else { const btn=document.createElement('button'); btn.textContent='購入 ' + c.cost + 'T'; btn.addEventListener('click', ()=>{ if(state.tickets >= c.cost){ state.tickets -= c.cost; c.owned = true; renderCharms(); renderHUD(); log('チャーム '+c.name+' を購入'); messageBox(c.name+' を購入しました'); } else messageBox('チケットが足りません'); }); right.appendChild(btn); } wrap.appendChild(info); wrap.appendChild(right); charmsContainer.appendChild(wrap); }); }
+function renderShop(){ shopEl.innerHTML=''; state.shop.forEach(it=>{ const wrap=document.createElement('div'); wrap.className='charm'; const info=document.createElement('div'); const name=document.createElement('strong'); name.textContent=it.name; const desc=document.createElement('div'); desc.style.fontSize='12px'; desc.style.color='var(--muted)'; desc.textContent=it.desc; info.appendChild(name); info.appendChild(desc); const right=document.createElement('div'); const btn=document.createElement('button'); btn.textContent = it.price>0?('購入 ' + it.price + 'T'):'無料'; btn.addEventListener('click', ()=>{ if(it.price>0){ if(state.tickets < it.price){ messageBox('チケットが足りません'); return; } state.tickets -= it.price; } if(it.id === 'extra_ticket'){ state.tickets += 1; messageBox('チケットを+1獲得'); log('ショップ: チケット+1'); } if(it.id === 'reroll_token'){ messageBox('リロールは利用可能'); } renderHUD(); renderShop(); }); right.appendChild(btn); wrap.appendChild(info); wrap.appendChild(right); shopEl.appendChild(wrap); }); }
+
+// ----- ラウンド開始 -----
+function startRound(){ state.spinsChosen = Number(spinChoice.value); state.spinsLeft = state.spinsChosen; state.atmTarget = 30 + Math.floor(Math.random()*100) + Math.floor(Math.random()*state.spinsChosen) + Math.floor(state.debt/20); renderHUD(); clearSelection(); messageBox('新ラウンド開始 — ATM目標: ' + state.atmTarget); log('ラウンド開始: ATM ' + state.atmTarget + ', spins ' + state.spinsChosen); }
+
+// ----- symbol selection -----
+function weightedRandomSymbol(){ const weights = { '🍒': 20, '🍋': 18, '🔔': 12, '💎': 4, '7️⃣': 8, '⭐': 24, '🍀': 10 }; const precision = state.charms.find(c=>c.id==='precision'&&c.owned); if(precision){ weights['💎'] += 3; weights['7️⃣'] += 2; } const pool=[]; Object.keys(weights).forEach(sym=>{ for(let i=0;i<weights[sym];i++) pool.push(sym); }); return pool[Math.floor(Math.random()*pool.length)]; }
+
+// ----- spin animation & control -----
+function startSpin(){ if(spinningFlag) return; // already
+  // if no spins left, start round
+  if(state.spinsLeft <= 0){ startRound(); renderHUD(); }
+  const bet = Math.max(1, Math.floor(Number(betInput.value) || state.bet)); state.bet = bet; if(state.coins < bet){ messageBox('コインが足りません'); return; } state.coins -= bet; renderHUD();
+  spinningFlag = true; stopRequested = false; stopBtn.disabled = false; spinBtn.disabled = true;
+  playTone(440,0.06);
+  // start rapid randomization for each column
+  for(let c=0;c<COLS;c++){
+    if(spinIntervals[c]) clearInterval(spinIntervals[c]);
+    spinIntervals[c] = setInterval(()=>{ for(let r=0;r<ROWS;r++){ const s = weightedRandomSymbol(); gridSymbols[r][c] = s; cells[r][c].querySelector('.sym').textContent = s; } }, 60 + c*10);
+    // schedule stop
+    const base = 900 + Math.floor(Math.random()*400);
+    scheduledStops[c] = setTimeout(()=>{ stopColumn(c); }, base + c*300);
   }
-
-  const titleInfo = forecast[0] || {};
-  // titleInfo.typhoonNumber の形式は場合によるため安全に扱う
-  const typhoonNumberRaw = String(titleInfo.typhoonNumber || '');
-  // 表示用: 短縮番号とフル番号の併記 (例: 台風19号 (2519))
-  const shortNum = shortTyphoonNumber(typhoonNumberRaw);
-  const displayFull = typhoonNumberRaw || '';
-  const nameEn = titleInfo.name?.en || '';
-  const titleText = nameEn ? `🌀 台風${shortNum}号 (${displayFull}) — ${escapeHtml(nameEn)}` : `🌀 台風${shortNum}号 (${displayFull})`;
-
-  titleBox.textContent = titleText;
-  titleBox.style.display = 'block';
-  document.querySelector("#infobox h2").textContent = "詳細情報";
-
-  // 「実況」を探す
-  const currentForecast = forecast.find(f => typeof f.part === 'object' && (f.part.jp === "実況" || f.part.en === "Analysis" || f.part.ja === "実況")) || forecast[1] || forecast[0];
-  if (!currentForecast || !currentForecast.center) {
-    // 中心座標が無ければ描画不可
-    return;
-  }
-
-  const center = currentForecast.center; // [lat, lng]
-  const track = currentForecast.track?.typhoon;
-  const preTrack = currentForecast.track?.preTyphoon;
-
-  let forecastBounds = L.latLngBounds([center]);
-  let galeBounds = null;
-
-  if (Array.isArray(preTrack)) L.polyline(preTrack, { color: "#00bfff", weight: 2, dashArray: "5,5" }).addTo(allList);
-  if (Array.isArray(track)) L.polyline(track, { color: "#00bfff", weight: 4 }).addTo(allList);
-
-  L.circleMarker(center, { radius: 8, fillColor: "#ff0000", color: "#fff", weight: 2, opacity: 1, fillOpacity: 0.9 }).addTo(allList);
-  L.marker(center, { icon: L.divIcon({ html: '<div class="leaflet_datetext">現在</div>', iconSize: [0,0], iconAnchor: [-20,10] }) }).addTo(textList);
-
-  const storm = currentForecast.stormWarningArea?.arc?.[0];
-  if (storm && storm[1]) {
-    L.circle(center, { radius: storm[1], color: "#ff0000", fillColor: "#ff0000", weight: 0, fillOpacity: 0.2 }).addTo(allList);
-  }
-
-  const gale = currentForecast.galeWarningArea;
-  if (gale && gale.radius) {
-    L.circle(center, { radius: gale.radius, color: "#ffff00", fillColor: "#ffff00", weight: 0, fillOpacity: 0.15 }).addTo(allList);
-
-    galeBounds = L.latLngBounds();
-    const latOffset = gale.radius / 111000;
-    const lngOffset = gale.radius / (111000 * Math.cos(center[0] * Math.PI / 180));
-    galeBounds.extend([center[0] - latOffset, center[1] - lngOffset]);
-    galeBounds.extend([center[0] + latOffset, center[1] + lngOffset]);
-  }
-
-  for (let i = 2; i < forecast.length; i++) {
-    const item = forecast[i];
-    if (!item || !item.center || !item.probabilityCircle) continue;
-
-    const forecastCenter = item.center;
-    const probCircle = item.probabilityCircle;
-    const radius = probCircle.radius;
-
-    L.circle(forecastCenter, { radius: radius, color: "#ffffff", weight: 2, fillOpacity: 0 }).addTo(allList);
-
-    const tangentKey = Object.keys(probCircle || {}).find(k => k.startsWith('tangent'));
-    if (tangentKey) {
-      const tangentData = probCircle[tangentKey];
-      if (Array.isArray(tangentData)) {
-        L.polyline(tangentData[0], { color: "#ffffff", weight: 2, dashArray: "6 4" }).addTo(allList);
-        L.polyline(tangentData[1], { color: "#ffffff", weight: 2, dashArray: "6 4" }).addTo(allList);
-      }
-    }
-
-    const latOffset = radius / 111000;
-    const lngOffset = radius / (111000 * Math.cos(forecastCenter[0] * Math.PI / 180));
-    forecastBounds.extend([forecastCenter[0] - latOffset, forecastCenter[1] - lngOffset]);
-    forecastBounds.extend([forecastCenter[0] + latOffset, forecastCenter[1] + lngOffset]);
-
-    const dt = new Date(item.validtime?.JST || item.validtime || item.time || Date.now());
-    const label = `${dt.getDate()}日${dt.getHours()}時`;
-    L.marker(forecastCenter, { icon: L.divIcon({ html: `<div class="leaflet_datetext">${label}</div>`, iconSize:[0,0], iconAnchor:[-20,10] }) }).addTo(textList);
-  }
-
-  // 表示範囲の決定（予報円と暴風域の双方を考慮）
-  let targetBounds = L.latLngBounds(forecastBounds.getSouthWest(), forecastBounds.getNorthEast());
-  if (galeBounds) targetBounds.extend(galeBounds);
-  map.fitBounds(targetBounds.pad(0.2), { padding: [60, 60] });
-
-  // spec から実況相当のデータを拾って infobox に表示
-  const currentSpec = (Array.isArray(spec) && spec.find(s => s.advancedHours === 0)) || spec[0] || {};
-  const info = {
-    time: currentForecast?.validtime?.JST?.replace("T"," ")?.slice(0,16) || (currentForecast?.validtime || "-"),
-    pressure: currentSpec?.pressure || "-",
-    wind: currentSpec?.maximumWind?.sustained?.["m/s"] || "-",
-    gust: currentSpec?.maximumWind?.gust?.["m/s"] || "-",
-    direction: currentSpec?.course || "-",
-    speed: currentSpec?.speed?.["km/h"] || "-",
-    location: currentSpec?.location || "-"
-  };
-  document.getElementById("time").textContent = info.time;
-  document.getElementById("pressure").textContent = info.pressure ? `${info.pressure} hPa` : "-";
-  document.getElementById("wind").textContent = info.wind ? `${info.wind} m/s` : "-";
-  document.getElementById("gust").textContent = info.gust ? `${info.gust} m/s` : "-";
-  document.getElementById("direction").textContent = info.direction;
-  document.getElementById("speed").textContent = info.speed ? `${info.speed} km/h` : "-";
-  document.getElementById("location").textContent = info.location;
 }
 
-/* ============================
-   台風リスト取得 -> セレクタ生成 -> 選択時に forecast/spec を取得して描画
-   URLクエリ (?19) があれば自動選択
-   ============================ */
-async function loadTyphoonListAndInit() {
-  const selectorContainer = document.getElementById('typhoon-selector-container');
-  selectorContainer.innerHTML = ''; // クリア
-
-  // 1) 台風リストを取得（モックデータは使わない）
-  let list;
-  try {
-    const resp = await fetch('https://www.jma.go.jp/bosai/typhoon/data/targetTc.json');
-    if (!resp.ok) throw new Error('targetTc.json not ok: ' + resp.status);
-    list = await resp.json();
-  } catch (e) {
-    console.error('気象庁 targetTc.json の取得に失敗しました:', e);
-    // モックは使わないため、台風が取得できなければ一覧は作らず終了する
-    drawTyphoon([], []);
-    return;
+function stopColumn(c){ if(!spinIntervals[c]) return; // already stopped
+  // gradually slow down then set final
+  clearInterval(spinIntervals[c]); spinIntervals[c] = null;
+  // small deceleration sequence
+  let decel = 120; let rounds = 5; function decStep(){ if(rounds<=0){ // finalize
+      const final = []; for(let r=0;r<ROWS;r++){ final[r] = weightedRandomSymbol(); gridSymbols[r][c] = final[r]; cells[r][c].querySelector('.sym').textContent = final[r]; }
+      // small highlight animation per column
+      for(let r=0;r<ROWS;r++){ cells[r][c].classList.add('flash'); setTimeout(()=>cells[r][c].classList.remove('flash'),360); }
+      checkAllStopped(); return; }
+    // update column with random symbols
+    for(let r=0;r<ROWS;r++){ const s = weightedRandomSymbol(); gridSymbols[r][c] = s; cells[r][c].querySelector('.sym').textContent = s; }
+    decel += 80; rounds--; setTimeout(decStep, decel);
   }
+  decStep();
+}
 
-  if (!Array.isArray(list) || list.length === 0) {
-    drawTyphoon([], []);
-    return;
-  }
-
-  // 2) セレクタを作る（遅延ロード方式：選んだときに詳細 fetch）
-  const selector = document.createElement('select');
-  selector.id = 'typhoon-selector';
-
-  list.forEach(item => {
-    const opt = document.createElement('option');
-    opt.value = item.tropicalCyclone; // 例: "TC2524"
-    // 表示ラベル: 短縮番号 (フル番号) — tropicalCyclone — 発表時刻（見やすく）
-    const shortNum = shortTyphoonNumber(item.typhoonNumber);
-    const labelTime = item.issue ? (new Date(item.issue)).toLocaleString('ja-JP', { hour12:false }) : '';
-    opt.textContent = `台風${shortNum}号 (${item.typhoonNumber}) — ${item.tropicalCyclone} ${labelTime}`;
-    opt.dataset.typhoonNumber = String(item.typhoonNumber || '');
-    selector.appendChild(opt);
-  });
-
-  selectorContainer.appendChild(selector);
-
-  // 3) URLクエリでの初期選択
-  const qNum = getQueryTyphoonNumber(); // 数値 or null
-  let initialIndex = 0;
-  if (qNum !== null) {
-    // list 中で短縮番号が一致するものを探す（末尾がクエリの数字と一致するか）
-    const foundIndex = list.findIndex(item => {
-      const tn = String(item.typhoonNumber || '');
-      return tn.endsWith(String(qNum));
-    });
-    if (foundIndex !== -1) initialIndex = foundIndex;
-    // 見つからなければ初期 0 のまま
-  }
-
-  // helper: 選択された tropicalCyclone に対して詳細を取得して描画
-  async function loadAndDrawTyphoon(tcId, optionEl) {
-    if (!tcId) { drawTyphoon([], []); return; }
-    try {
-      const [forecastResp, specResp] = await Promise.all([
-        fetch(`https://www.jma.go.jp/bosai/typhoon/data/${tcId}/forecast.json`),
-        fetch(`https://www.jma.go.jp/bosai/typhoon/data/${tcId}/specifications.json`)
-      ]);
-      if (!forecastResp.ok || !specResp.ok) throw new Error('forecast/spec 取得失敗');
-      const forecast = await forecastResp.json();
-      const spec = await specResp.json();
-      drawTyphoon(forecast, spec);
-
-      // 取得成功なら option のラベルを英名付きに更新（存在すれば）
-      try {
-        const nameEn = forecast?.[0]?.name?.en;
-        const fullNum = String(forecast?.[0]?.typhoonNumber || optionEl?.dataset?.typhoonNumber || '');
-        const shortNum = shortTyphoonNumber(fullNum);
-        if (optionEl && nameEn) {
-          optionEl.textContent = `台風${shortNum}号 (${fullNum}) — ${nameEn}`;
-        }
-      } catch(e){ /* 念のため無視 */ }
-
-    } catch (err) {
-      console.error('台風詳細の取得に失敗:', err);
-      drawTyphoon([], []);
+function expediteStops(){ // user pressed stop -> stop all columns faster
+  stopRequested = true; stopBtn.disabled = true;
+  for(let c=0;c<COLS;c++){ if(scheduledStops[c]){ clearTimeout(scheduledStops[c]); scheduledStops[c]=null; }
+    if(spinIntervals[c]){ // stop now
+      stopColumn(c);
     }
   }
-
-  // イベント登録
-  selector.addEventListener('change', ev => {
-    const tcId = ev.target.value;
-    const opt = ev.target.selectedOptions[0];
-    loadAndDrawTyphoon(tcId, opt);
-    // URL を現在選択に合わせて書き換える（履歴を汚さない replaceState）
-    const short = shortTyphoonNumber(opt.dataset.typhoonNumber || '');
-    if (short) history.replaceState(null, '', location.pathname + '?' + encodeURIComponent(short));
-  });
-
-  // 初期選択してロード
-  selector.selectedIndex = initialIndex;
-  const initOpt = selector.options[initialIndex];
-  if (initOpt) {
-    // query があれば URL を短縮番号で統一（既にそうなら変わらない）
-    const short = shortTyphoonNumber(initOpt.dataset.typhoonNumber || '');
-    if (short) history.replaceState(null, '', location.pathname + '?' + encodeURIComponent(short));
-    await loadAndDrawTyphoon(initOpt.value, initOpt);
-  }
 }
 
-/* ============================
-   コンテキストメニュー等（そのまま）
-   ============================ */
-const japanBounds = L.latLngBounds([[21, 122], [50, 159]]);
-const asiaBounds = L.latLngBounds([[-11, 70], [55, 230]]);
-let previousBounds = null;
-function removeContextMenu() { const el = document.getElementById('context-menu'); if (el) el.remove(); }
+function checkAllStopped(){ // called after each column finalizes
+  // if any spinIntervals still running or scheduledStops exist, not all stopped
+  const anyRunning = spinIntervals.some(x=>x!==null);
+  if(anyRunning) return; // wait until all
+  // all columns stopped -> evaluate
+  spinningFlag = false; spinBtn.disabled = false; stopBtn.disabled = true;
+  // evaluate
+  const evalRes = evaluateGrid(gridSymbols);
+  let gain = evalRes.totalGain; let ticketsG = evalRes.tickets; const luck = state.charms.find(c=>c.id==='luck'&&c.owned); if(luck) gain = Math.floor(gain*1.2);
+  state.coins += gain; state.tickets += ticketsG; renderHUD();
+  // mark winning cells
+  evalRes.lines.forEach(line=>{ line.cells.forEach(([r,c])=>cells[r][c].classList.add('win')); });
+  // floating big gain
+  if(gain>0) showGainOverlay(gain);
+  // decrement spins left
+  state.spinsLeft = Math.max(0, state.spinsLeft - 1);
+  renderHUD();
+  if(state.spinsLeft===0){ messageBox('スピン終了。ATMで目標を満たすか確認してください'); }
+}
 
-map.on('contextmenu', function(e) {
-  e.originalEvent.preventDefault();
-  removeContextMenu();
-  const menu = document.createElement('div');
-  menu.id = 'context-menu';
-  menu.style.left = e.containerPoint.x + 'px';
-  menu.style.top = e.containerPoint.y + 'px';
+// ----- stop button handler -----
+stopBtn.addEventListener('click', ()=>{ expediteStops(); });
 
-  const showJapan = document.createElement('div');
-  showJapan.className = 'context-menu-item';
-  showJapan.textContent = '日本全体を表示';
-  showJapan.onclick = () => { if (!previousBounds) previousBounds = map.getBounds(); map.fitBounds(japanBounds); removeContextMenu(); };
+// ----- utility: show big gain overlay -----
+let gainTimer = null;
+function showGainOverlay(amount){ gainOverlay.textContent = '+' + amount + ' Φ'; gainOverlay.classList.add('show'); playTone(880,0.18); if(gainTimer) clearTimeout(gainTimer); gainTimer = setTimeout(()=>{ gainOverlay.classList.remove('show'); },1400); }
 
-  const showAsia = document.createElement('div');
-  showAsia.className = 'context-menu-item';
-  showAsia.textContent = 'アジア全体を表示';
-  showAsia.onclick = () => { if (!previousBounds) previousBounds = map.getBounds(); map.fitBounds(asiaBounds); removeContextMenu(); };
+// ----- reroll functions -----
+function toggleCellSelection(r,c){ const key=r+','+c; if(selectedCells.has(key)){ selectedCells.delete(key); cells[r][c].classList.remove('selected'); } else { selectedCells.add(key); cells[r][c].classList.add('selected'); } }
+function clearSelection(){ selectedCells.forEach(k=>{ const [r,c]=k.split(',').map(Number); cells[r][c].classList.remove('selected'); }); selectedCells.clear(); }
+function rerollSelected(){ if(selectedCells.size===0){ messageBox('セルが選択されていません'); return; } const costPer=1; const need = costPer * selectedCells.size; if(state.tickets < need){ messageBox('チケットが足りません'); return; } state.tickets -= need; selectedCells.forEach(k=>{ const [r,c]=k.split(',').map(Number); const sym = weightedRandomSymbol(); gridSymbols[r][c]=sym; cells[r][c].querySelector('.sym').textContent=sym; cells[r][c].classList.add('flash'); setTimeout(()=>cells[r][c].classList.remove('flash'),360); }); // evaluate
+  const evalRes = evaluateGrid(gridSymbols); let gain = evalRes.totalGain; let ticketsG = evalRes.tickets; const luck = state.charms.find(c=>c.id==='luck'&&c.owned); if(luck) gain = Math.floor(gain*1.2); state.coins += gain; state.tickets += ticketsG; evalRes.lines.forEach(line=>{ line.cells.forEach(([r,c])=>cells[r][c].classList.add('win')); }); clearSelection(); renderHUD(); messageBox('リロール完了（消費 ' + need + 'T）'); log('リロール: ' + need + 'T'); }
+function rerollAll(){ const cost=3; if(state.tickets < cost){ messageBox('チケットが足りません'); return; } state.tickets -= cost; for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ const sym=weightedRandomSymbol(); gridSymbols[r][c]=sym; cells[r][c].querySelector('.sym').textContent=sym; cells[r][c].classList.add('flash'); setTimeout(()=>cells[r][c].classList.remove('flash'),360); } } const evalRes=evaluateGrid(gridSymbols); let gain=evalRes.totalGain; let ticketsG=evalRes.tickets; const luck=state.charms.find(c=>c.id==='luck'&&c.owned); if(luck) gain=Math.floor(gain*1.2); state.coins+=gain; state.tickets+=ticketsG; evalRes.lines.forEach(line=>{ line.cells.forEach(([r,c])=>cells[r][c].classList.add('win')); }); renderHUD(); messageBox('盤面リロール（消費 3T）'); log('盤面リロール'); }
 
-  menu.appendChild(showJapan);
-  menu.appendChild(showAsia);
+// ----- evaluate grid -----
+function evaluateGrid(g){ const dirs=[[0,1],[1,0],[1,1],[1,-1]]; const lines=[]; let totalGain=0; let tickets=0; for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ const sym=g[r][c]; dirs.forEach(dir=>{ const seq=[[r,c]]; let rr=r+dir[0], cc=c+dir[1]; while(rr>=0 && rr<ROWS && cc>=0 && cc<COLS && g[rr][cc]===sym){ seq.push([rr,cc]); rr+=dir[0]; cc+=dir[1]; } if(seq.length>=3){ const key=seq.map(x=>x.join(',')).join('|'); if(!lines.some(l=>l.key===key)){ lines.push({key,symbol:sym,length:seq.length,cells:seq}); const base=BASE_VALUES[sym]||5; const multiplier = seq.length===3?1:seq.length===4?1.8:3.5; totalGain += Math.floor(base*multiplier); if(seq.length>=4) tickets += (seq.length-3); } } }); } } return {lines,totalGain,tickets}; }
 
-  if (previousBounds) {
-    const sep = document.createElement('div'); sep.className = 'context-menu-separator'; menu.appendChild(sep);
-    const revert = document.createElement('div'); revert.className = 'context-menu-item'; revert.textContent = '元の領域に戻す';
-    revert.onclick = () => { map.fitBounds(previousBounds); removeContextMenu(); };
-    menu.appendChild(revert);
-  }
+// ----- ATM / round advancement -----
+function attemptAdvance(){ if(state.coins >= state.atmTarget){ state.coins -= state.atmTarget; state.debt = Math.max(0, state.debt - state.atmTarget); const bonusTickets = Math.max(0, Math.floor(state.spinsChosen/3)); state.tickets += bonusTickets; const interest = state.charms.find(c=>c.id==='interest'&&c.owned); if(interest){ const bonus = Math.floor(state.coins * 0.05); state.coins += bonus; log('利子ボーナス +' + bonus); messageBox('利子ボーナス +' + bonus); } messageBox('ATM払済。次ラウンドへ。チケット+' + bonusTickets); log('ATM支払い成功'); state.debt += 30 + Math.floor(Math.random()*40); startRound(); renderHUD(); } else { const shield = state.charms.find(c=>c.id==='shield'&&c.owned); if(shield){ state.debt += 10; const sc = state.charms.find(c=>c.id==='shield'); if(sc) sc.owned=false; messageBox('Shield が発動して借金増加を軽減しました'); log('Shield used'); } else { state.debt += 20 + Math.floor(Math.random()*30); messageBox('支払い失敗。借金が増えました...'); log('ATM未払い: 借金増加'); } renderHUD(); } }
 
-  map.getContainer().appendChild(menu);
-});
-map.on('click', removeContextMenu);
+// ----- UI button wiring -----
+spinBtn.addEventListener('click', ()=>startSpin()); stopBtn.addEventListener('click', ()=>expediteStops()); autoResolve.addEventListener('click', ()=>{ while(state.spinsLeft>0){ const ok=spinOnceImmediate(); if(!ok) break; } messageBox('全スピン解決'); renderHUD(); });
+rerollBtn.addEventListener('click', ()=>{ rerollSelected(); }); rerollAllBtn.addEventListener('click', ()=>{ rerollAll(); });
+payATM.addEventListener('click', ()=>{ attemptAdvance(); renderHUD(); });
+partialPay.addEventListener('click', ()=>{ const amt = Math.min(state.coins, Math.floor(state.atmTarget/2)); if(amt<=0){ messageBox('支払うコインがありません'); return; } state.coins -= amt; state.debt = Math.max(0, state.debt - amt); messageBox('一部支払いしました: ' + amt); renderHUD(); });
+saveBtn.addEventListener('click', ()=>{ localStorage.setItem('cp_clone_v4', JSON.stringify(state)); messageBox('セーブしました'); });
+loadBtn.addEventListener('click', ()=>{ const d = localStorage.getItem('cp_clone_v4'); if(!d){ messageBox('保存データがありません'); return; } try{ const p = JSON.parse(d); state.coins = p.coins||state.coins; state.tickets = p.tickets||state.tickets; state.debt = p.debt||state.debt; state.bet = p.bet||state.bet; if(Array.isArray(p.charms)){ p.charms.forEach(pc=>{ const sc = state.charms.find(x=>x.id===pc.id); if(sc) sc.owned = !!pc.owned; }); } renderHUD(); renderCharms(); renderShop(); messageBox('ロードしました'); } catch(e){ messageBox('ロード失敗'); } });
+nextRoundBtn.addEventListener('click', ()=>{ startRound(); renderHUD(); });
 
-/* ============================
-   初期化
-   ============================ */
-loadTyphoonListAndInit();
+// keyboard
+window.addEventListener('keydown', function(e){ if(e.code==='Space'){ e.preventDefault(); spinBtn.click(); } if(e.key==='h' || e.key==='H'){ state.tickets++; messageBox('デバッグ: チケット+1'); renderHUD(); } });
 
+// ----- instant spin (used for autoResolve) -----
+function spinOnceImmediate(){ if(state.spinsLeft <=0){ startRound(); renderHUD(); }
+  const bet = Math.max(1, Math.floor(Number(betInput.value) || state.bet)); state.bet = bet; if(state.coins < bet){ messageBox('コインが足りません'); return false; } state.coins -= bet; for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ const sym=weightedRandomSymbol(); gridSymbols[r][c]=sym; cells[r][c].querySelector('.sym').textContent = sym; } } const evalRes = evaluateGrid(gridSymbols); let gain = evalRes.totalGain; let ticketsG = evalRes.tickets; const luck = state.charms.find(c=>c.id==='luck'&&c.owned); if(luck) gain = Math.floor(gain*1.2); state.coins += gain; state.tickets += ticketsG; evalRes.lines.forEach(line=>{ line.cells.forEach(([r,c])=>cells[r][c].classList.add('win')); }); state.spinsLeft = Math.max(0, state.spinsLeft - 1); renderHUD(); if(gain>0) showGainOverlay(gain); return true; }
+
+// ----- 初期化 -----
+initBoard(); renderHUD(); renderCharms(); renderShop(); startRound();
 </script>
 </body>
 </html>
+
