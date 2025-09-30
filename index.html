@@ -1,346 +1,662 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-<title>CloverPit-like — Major Spin Upgrade (fixed)</title>
-<style>
-  :root{--bg:#0b0b0f;--panel:#0f1114;--accent:#e6b422;--accent-2:#ffd66b;--muted:#9aa0a6;--hit:#ff5bf0}
-  *{box-sizing:border-box;font-family:Inter,system-ui,Roboto,'Hiragino Kaku Gothic ProN',Meiryo,Arial}
-  html,body{height:100%}
-  body{margin:0;background:radial-gradient(circle at 10% 10%, #14141a 0%, #07070a 40%, #050507 100%);color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh;padding:12px}
-  .wrap{width:1100px;max-width:100%;background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);border-radius:14px;padding:14px;box-shadow:0 12px 40px rgba(0,0,0,.7);border:1px solid rgba(255,255,255,0.03)}
-  header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
-  h1{margin:0;font-size:20px}
-  .hud{display:flex;gap:8px;margin-left:auto;align-items:center}
-  .stat{background:linear-gradient(180deg,#0c0c0c,#0a0a0a);padding:8px 10px;border-radius:10px;font-size:13px;border:1px solid rgba(255,255,255,0.02)}
+import React, { useState, useRef, useEffect } from 'react';
+import { Camera, Mic, Square, Volume2, VolumeX, Film, Download, BarChart3 } from 'lucide-react';
 
-  .game{display:flex;gap:14px}
-  .left{flex:1}
-  .machine{background:linear-gradient(180deg,#0b0b0f,#111217);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.03)}
-  .board{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;justify-content:center;padding:10px}
-  .cell{aspect-ratio: 4 / 3; background:linear-gradient(180deg,#070709,#0d0d10);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;border:2px solid rgba(255,255,255,.03);position:relative;overflow:hidden;touch-action:manipulation}
-  .cell .glow{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .35s}
-  .cell.win .glow{opacity:0.95;background:linear-gradient(90deg,rgba(230,180,34,.12),rgba(255,255,255,.03));outline:4px solid var(--hit)}
-  .cell.selected{outline:3px solid rgba(230,180,34,.18);box-shadow:0 6px 18px rgba(230,180,34,.04)}
-  .controls{display:flex;gap:8px;align-items:center;margin-top:12px;flex-wrap:wrap}
-  button{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;cursor:pointer;font-weight:700}
-  button.ghost{background:transparent;border:1px solid rgba(255,255,255,.06)}
-  button:disabled{opacity:.45;cursor:not-allowed}
-  .right{width:360px}
-  .panel{background:linear-gradient(180deg,#0b0b0d,#0c0c0e);padding:12px;border-radius:10px;margin-bottom:12px;border:1px solid rgba(255,255,255,0.02)}
-  .list{display:flex;flex-direction:column;gap:8px}
-  .charm{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:6px;background:rgba(255,255,255,.02)}
-  small{color:var(--muted)}
-  footer{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}
+export default function BaseballCommentary() {
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [isCommenting, setIsCommenting] = useState(false);
+  const [isSpeechEnabled, setIsSpeechEnabled] = useState(true);
+  const [commentary, setCommentary] = useState('');
+  const [allComments, setAllComments] = useState([]);
+  const [motionLevel, setMotionLevel] = useState(0);
+  const [gameStats, setGameStats] = useState({
+    pitches: 0,
+    hits: 0,
+    catches: 0,
+    runs: 0,
+    totalMotion: 0,
+    peakMotion: 0,
+    duration: 0
+  });
+  const [highlights, setHighlights] = useState([]);
+  const [showDigest, setShowDigest] = useState(false);
+  
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  const streamRef = useRef(null);
+  const previousFrameRef = useRef(null);
+  const animationRef = useRef(null);
+  const motionHistoryRef = useRef([]);
+  const lastEventTimeRef = useRef(0);
+  const startTimeRef = useRef(0);
+  const durationIntervalRef = useRef(null);
 
-  .flash{animation:flash .45s ease-in-out}
-  @keyframes flash{0%{transform:scale(1)}50%{transform:scale(1.03)}100%{transform:scale(1)}}
-  .big{font-size:16px;font-weight:800}
-  .muted{color:var(--muted)}
-
-  /* big gain overlay */
-  .gainOverlay{position:fixed;left:50%;top:24%;transform:translateX(-50%);background:rgba(0,0,0,0.6);padding:12px 20px;border-radius:8px;font-size:34px;font-weight:900;color:var(--accent-2);border:3px solid #111;z-index:200;opacity:0;pointer-events:none;transition:opacity .45s,transform .45s}
-  .gainOverlay.show{opacity:1;transform:translateX(-50%) translateY(-10px)}
-
-  /* header small HUD for spins left */
-  .topHud{position:fixed;left:20px;top:20px;background:rgba(0,0,0,0.6);padding:12px;border-radius:6px;color:#fff;z-index:150;border:2px solid rgba(255,255,255,0.04);min-width:120px}
-  .topHud .bigN{font-size:18px;font-weight:900}
-
-  /* responsive */
-  @media (max-width:900px){
-    .game{flex-direction:column}
-    .right{width:100%}
-    .board{grid-template-columns:repeat(5,calc((100vw - 60px)/5));gap:6px}
-    .wrap{padding:10px}
-    .hud{flex-wrap:wrap}
-  }
-</style>
-</head>
-<body>
-<div class="topHud">
-  <div class="bigN" id="topCoins">200 Φ</div>
-  <div>SPINS LEFT: <span id="topSpins">0</span></div>
-</div>
-
-<div class="gainOverlay" id="gainOverlay">+0 Φ</div>
-
-<div class="wrap">
-  <header>
-    <h1>🍀 CloverPit-ish — Spin Upgrade (fixed)</h1>
-    <div class="hud">
-      <div class="stat">💰 <span id="coins">200</span></div>
-      <div class="stat">🎟️ <span id="tickets">3</span></div>
-      <div class="stat">📉 <span id="debt">80</span></div>
-    </div>
-  </header>
-
-  <div class="game">
-    <div class="left">
-      <div class="machine">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <div><small class="muted">スピン数を選んでSPIN。クリックでセル選択→リロール。</small></div>
-          <div><small class="muted">スペース: スピン</small></div>
-        </div>
-
-        <div class="board" id="board"></div>
-
-        <div class="controls">
-          <label class="muted">スピン数:
-            <select id="spinChoice">
-              <option value="3">3 スピン (安全)</option>
-              <option value="7">7 スピン (ハイリスク)</option>
-            </select>
-          </label>
-          <label class="muted">ベット: <input id="betInput" type="number" min="1" value="10" style="width:80px;padding:6px;border-radius:6px;border:none"></label>
-          <button id="spinBtn">SPIN</button>
-          <button id="stopBtn" class="ghost" disabled>STOP</button>
-          <button id="autoResolve" class="ghost">全スピン解決</button>
-          <button id="rerollBtn" class="ghost">選択をリロール（1T/セル）</button>
-          <button id="rerollAllBtn" class="ghost">盤面をリロール（3T）</button>
-          <div style="margin-left:auto;text-align:right">
-            <div class="muted">ATM目標: <strong id="atmTarget">--</strong></div>
-            <div class="muted">残りスピン: <strong id="spinsLeft">-</strong></div>
-          </div>
-        </div>
-
-        <div id="message" class="panel" style="margin-top:12px;display:none"></div>
-      </div>
-
-      <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
-        <div class="panel" style="flex:1;min-width:220px">
-          <strong>ラウンド / ATM</strong>
-          <div style="margin-top:8px">ラウンド開始時にATM目標がランダムで決まります。目標を満たすか、借金を返せれば次ラウンドへ。</div>
-          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-            <button id="payATM">ATMに全額支払う</button>
-            <button id="partialPay" class="ghost">一部支払い</button>
-          </div>
-        </div>
-
-        <div class="panel" style="width:320px;min-width:200px">
-          <strong>操作 / セーブ</strong>
-          <div style="margin-top:8px"><small class="muted">ショップはチケットで購入。リロールやチャームを駆使して進めよう。</small></div>
-          <div style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap">
-            <button id="saveBtn">セーブ</button>
-            <button id="loadBtn">ロード</button>
-            <button id="nextRound" class="ghost">次ラウンド開始</button>
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <aside class="right">
-      <div class="panel">
-        <strong>ショップ（チケットで購入）</strong>
-        <div class="list" id="shop"></div>
-      </div>
-
-      <div class="panel">
-        <strong>チャーム（チケットで購入）</strong>
-        <div class="list" id="charms"></div>
-      </div>
-
-      <div class="panel">
-        <strong>履歴 / 情報</strong>
-        <div id="history" style="max-height:220px;overflow:auto;font-size:13px;margin-top:8px"></div>
-      </div>
-
-    </aside>
-  </div>
-
-  <footer>このHTMLはCloverPitのスピン演出をより本家に寄せた拡張版です。</footer>
-</div>
-
-<script>
-// ----- 基本定義 -----
-const COLS = 5, ROWS = 3;
-const SYMBOLS = ['🍒','🍋','🔔','💎','7️⃣','⭐','🍀'];
-const BASE_VALUES = { '🍒': 10, '🍋': 12, '🔔': 25, '💎': 80, '7️⃣': 60, '⭐': 8, '🍀': 30 };
-
-let state = {
-  coins: 200,
-  tickets: 3,
-  debt: 80,
-  bet: 10,
-  spinsChosen: 3,
-  spinsLeft: 0,
-  atmTarget: 0,
-  charms: [
-    {id:'luck',name:'Luck',desc:'勝利時の配当+20%',cost:2,owned:false},
-    {id:'precision',name:'Precision',desc:'高レアの出現率↑（軽度）',cost:2,owned:false},
-    {id:'interest',name:'Piggy',desc:'ラウンド終了時の残高に小さな利子を付与',cost:1,owned:false},
-    {id:'shield',name:'Shield',desc:'借金急増を一度だけ防ぐ',cost:3,owned:false}
-  ],
-  shop: [
-    {id:'reroll_token',name:'リロールトークン',desc:'選択セルをチケットでリロール可能',price:0,oneTime:false},
-    {id:'extra_ticket',name:'チケット+1',desc:'チケットを+1する即時アイテム',price:2,oneTime:true}
-  ]
-};
-
-// DOM
-const boardEl = document.getElementById('board');
-const coinsEl = document.getElementById('coins');
-const ticketsEl = document.getElementById('tickets');
-const debtEl = document.getElementById('debt');
-const topCoinsEl = document.getElementById('topCoins');
-const topSpinsEl = document.getElementById('topSpins');
-const spinChoice = document.getElementById('spinChoice');
-const spinBtn = document.getElementById('spinBtn');
-const stopBtn = document.getElementById('stopBtn');
-const autoResolve = document.getElementById('autoResolve');
-const betInput = document.getElementById('betInput');
-const atmTargetEl = document.getElementById('atmTarget');
-const spinsLeftEl = document.getElementById('spinsLeft');
-const messageEl = document.getElementById('message');
-const charmsContainer = document.getElementById('charms');
-const shopEl = document.getElementById('shop');
-const historyEl = document.getElementById('history');
-const payATM = document.getElementById('payATM');
-const partialPay = document.getElementById('partialPay');
-const saveBtn = document.getElementById('saveBtn');
-const loadBtn = document.getElementById('loadBtn');
-const nextRoundBtn = document.getElementById('nextRound');
-const rerollBtn = document.getElementById('rerollBtn');
-const rerollAllBtn = document.getElementById('rerollAllBtn');
-const gainOverlay = document.getElementById('gainOverlay');
-
-let cells = []; // DOM elements
-let gridSymbols = []; // symbols
-let selectedCells = new Set();
-
-// spinning machinery
-let spinIntervals = Array(COLS).fill(null);
-let scheduledStops = Array(COLS).fill(null);
-let stopTimeouts = Array(COLS).fill(null);
-let spinningFlag = false;
-let stopRequested = false;
-
-// Audio context
-let audioCtx = null;
-function initAudio(){ if(audioCtx) return; audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-function playTone(frequency, time=0.08){ try{ initAudio(); const o = audioCtx.createOscillator(); const g = audioCtx.createGain(); o.type = 'sine'; o.frequency.value = frequency; g.gain.value = 0.08; o.connect(g); g.connect(audioCtx.destination); o.start(); g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + time); setTimeout(()=>o.stop(), time*1000 + 20); }catch(e){} }
-
-// ----- message box (fixed) -----
-function messageBox(txt, timeout = 3000){ if(!messageEl) return; messageEl.style.display = 'block'; messageEl.textContent = txt; if(messageBox._timer) clearTimeout(messageBox._timer); messageBox._timer = setTimeout(()=>{ try{ messageEl.style.display = 'none'; }catch(e){} }, timeout); }
-
-// ----- 初期化ボード -----
-function initBoard(){ boardEl.innerHTML=''; cells=[]; gridSymbols=[]; for(let r=0;r<ROWS;r++){ const rowEls=[]; const rowSyms=[]; for(let c=0;c<COLS;c++){ const el = document.createElement('div'); el.className='cell'; el.innerHTML = '<div class="glow"></div><div class="sym">-</div>'; el.addEventListener('click', ()=>toggleCellSelection(r,c)); el.addEventListener('touchstart', (ev)=>{ ev.preventDefault(); toggleCellSelection(r,c); }); boardEl.appendChild(el); rowEls.push(el); rowSyms.push('-'); } cells.push(rowEls); gridSymbols.push(rowSyms); } }
-
-function renderHUD(){ document.getElementById('coins').textContent = state.coins; document.getElementById('tickets').textContent = state.tickets; document.getElementById('debt').textContent = state.debt; topCoinsEl.textContent = state.coins + ' Φ'; topSpinsEl.textContent = state.spinsLeft; atmTargetEl.textContent = state.atmTarget; spinsLeftEl.textContent = state.spinsLeft; }
-function log(msg){ const d = document.createElement('div'); d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`; historyEl.prepend(d); }
-
-// ----- charms & shop -----
-function renderCharms(){ charmsContainer.innerHTML=''; state.charms.forEach(c=>{ const wrap=document.createElement('div'); wrap.className='charm'; const info=document.createElement('div'); const name=document.createElement('strong'); name.textContent=c.name; const desc=document.createElement('div'); desc.style.fontSize='12px'; desc.style.color='var(--muted)'; desc.textContent=c.desc; info.appendChild(name); info.appendChild(desc); const right=document.createElement('div'); if(c.owned){ const btn=document.createElement('button'); btn.textContent='解除'; btn.addEventListener('click', ()=>{ c.owned=false; renderCharms(); renderHUD(); log(c.name+' を解除'); }); right.appendChild(btn); } else { const btn=document.createElement('button'); btn.textContent='購入 ' + c.cost + 'T'; btn.addEventListener('click', ()=>{ if(state.tickets >= c.cost){ state.tickets -= c.cost; c.owned = true; renderCharms(); renderHUD(); log('チャーム '+c.name+' を購入'); messageBox(c.name+' を購入しました'); } else messageBox('チケットが足りません'); }); right.appendChild(btn); } wrap.appendChild(info); wrap.appendChild(right); charmsContainer.appendChild(wrap); }); }
-function renderShop(){ shopEl.innerHTML=''; state.shop.forEach(it=>{ const wrap=document.createElement('div'); wrap.className='charm'; const info=document.createElement('div'); const name=document.createElement('strong'); name.textContent=it.name; const desc=document.createElement('div'); desc.style.fontSize='12px'; desc.style.color='var(--muted)'; desc.textContent=it.desc; info.appendChild(name); info.appendChild(desc); const right=document.createElement('div'); const btn=document.createElement('button'); btn.textContent = it.price>0?('購入 ' + it.price + 'T'):'無料'; btn.addEventListener('click', ()=>{ if(it.price>0){ if(state.tickets < it.price){ messageBox('チケットが足りません'); return; } state.tickets -= it.price; } if(it.id === 'extra_ticket'){ state.tickets += 1; messageBox('チケットを+1獲得'); log('ショップ: チケット+1'); } if(it.id === 'reroll_token'){ messageBox('リロールは利用可能'); } renderHUD(); renderShop(); }); right.appendChild(btn); wrap.appendChild(info); wrap.appendChild(right); shopEl.appendChild(wrap); }); }
-
-// ----- ラウンド開始 -----
-function startRound(){ state.spinsChosen = Number(spinChoice.value); state.spinsLeft = state.spinsChosen; state.atmTarget = 30 + Math.floor(Math.random()*100) + Math.floor(Math.random()*state.spinsChosen) + Math.floor(state.debt/20); renderHUD(); clearSelection(); messageBox('新ラウンド開始 — ATM目標: ' + state.atmTarget); log('ラウンド開始: ATM ' + state.atmTarget + ', spins ' + state.spinsChosen); }
-
-// ----- symbol selection -----
-function weightedRandomSymbol(){ const weights = { '🍒': 20, '🍋': 18, '🔔': 12, '💎': 4, '7️⃣': 8, '⭐': 24, '🍀': 10 }; const precision = state.charms.find(c=>c.id==='precision'&&c.owned); if(precision){ weights['💎'] += 3; weights['7️⃣'] += 2; } const pool=[]; Object.keys(weights).forEach(sym=>{ for(let i=0;i<weights[sym];i++) pool.push(sym); }); return pool[Math.floor(Math.random()*pool.length)]; }
-
-// ----- spin animation & control -----
-function startSpin(){ if(spinningFlag) return; // already
-  // if no spins left, start round
-  if(state.spinsLeft <= 0){ startRound(); renderHUD(); }
-  const bet = Math.max(1, Math.floor(Number(betInput.value) || state.bet)); state.bet = bet; if(state.coins < bet){ messageBox('コインが足りません'); return; } state.coins -= bet; renderHUD();
-  spinningFlag = true; stopRequested = false; stopBtn.disabled = false; spinBtn.disabled = true;
-  playTone(440,0.06);
-  // start rapid randomization for each column
-  for(let c=0;c<COLS;c++){
-    if(spinIntervals[c]) clearInterval(spinIntervals[c]);
-    spinIntervals[c] = setInterval(()=>{ for(let r=0;r<ROWS;r++){ const s = weightedRandomSymbol(); gridSymbols[r][c] = s; cells[r][c].querySelector('.sym').textContent = s; } }, 60 + c*10);
-    // schedule stop
-    const base = 900 + Math.floor(Math.random()*400);
-    scheduledStops[c] = setTimeout(()=>{ stopColumn(c); }, base + c*300);
-  }
-}
-
-function stopColumn(c){ if(!spinIntervals[c]) return; // already stopped
-  // gradually slow down then set final
-  clearInterval(spinIntervals[c]); spinIntervals[c] = null;
-  // small deceleration sequence
-  let decel = 120; let rounds = 5; function decStep(){ if(rounds<=0){ // finalize
-      const final = []; for(let r=0;r<ROWS;r++){ final[r] = weightedRandomSymbol(); gridSymbols[r][c] = final[r]; cells[r][c].querySelector('.sym').textContent = final[r]; }
-      // small highlight animation per column
-      for(let r=0;r<ROWS;r++){ cells[r][c].classList.add('flash'); setTimeout(()=>cells[r][c].classList.remove('flash'),360); }
-      checkAllStopped(); return; }
-    // update column with random symbols
-    for(let r=0;r<ROWS;r++){ const s = weightedRandomSymbol(); gridSymbols[r][c] = s; cells[r][c].querySelector('.sym').textContent = s; }
-    decel += 80; rounds--; setTimeout(decStep, decel);
-  }
-  decStep();
-}
-
-function expediteStops(){ // user pressed stop -> stop all columns faster
-  stopRequested = true; stopBtn.disabled = true;
-  for(let c=0;c<COLS;c++){ if(scheduledStops[c]){ clearTimeout(scheduledStops[c]); scheduledStops[c]=null; }
-    if(spinIntervals[c]){ // stop now
-      stopColumn(c);
+  // 動き検出の詳細分析
+  const analyzeMotion = () => {
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+    if (!video || !canvas || video.readyState !== video.HAVE_ENOUGH_DATA) {
+      return { overall: 0, center: 0, left: 0, right: 0, top: 0, bottom: 0 };
     }
-  }
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    canvas.width = 160;
+    canvas.height = 120;
+    
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const currentFrame = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    
+    if (!previousFrameRef.current) {
+      previousFrameRef.current = currentFrame;
+      return { overall: 0, center: 0, left: 0, right: 0, top: 0, bottom: 0 };
+    }
+
+    const data = currentFrame.data;
+    const prevData = previousFrameRef.current.data;
+    const w = canvas.width;
+    const h = canvas.height;
+    
+    // エリア別の動き検出
+    const areas = {
+      center: { x: Math.floor(w * 0.35), y: Math.floor(h * 0.3), w: Math.floor(w * 0.3), h: Math.floor(h * 0.4), sum: 0 },
+      left: { x: 0, y: Math.floor(h * 0.2), w: Math.floor(w * 0.3), h: Math.floor(h * 0.6), sum: 0 },
+      right: { x: Math.floor(w * 0.7), y: Math.floor(h * 0.2), w: Math.floor(w * 0.3), h: Math.floor(h * 0.6), sum: 0 },
+      top: { x: Math.floor(w * 0.2), y: 0, w: Math.floor(w * 0.6), h: Math.floor(h * 0.3), sum: 0 },
+      bottom: { x: Math.floor(w * 0.2), y: Math.floor(h * 0.7), w: Math.floor(w * 0.6), h: Math.floor(h * 0.3), sum: 0 }
+    };
+
+    let overallSum = 0;
+    
+    Object.keys(areas).forEach(key => {
+      const area = areas[key];
+      for (let y = area.y; y < area.y + area.h && y < h; y++) {
+        for (let x = area.x; x < area.x + area.w && x < w; x++) {
+          const i = (y * w + x) * 4;
+          const diff = Math.abs(data[i] - prevData[i]) + 
+                       Math.abs(data[i + 1] - prevData[i + 1]) + 
+                       Math.abs(data[i + 2] - prevData[i + 2]);
+          area.sum += diff;
+          overallSum += diff;
+        }
+      }
+      area.avg = area.sum / (area.w * area.h * 3);
+    });
+
+    previousFrameRef.current = currentFrame;
+    
+    return {
+      overall: overallSum / (w * h * 3),
+      center: areas.center.avg,
+      left: areas.left.avg,
+      right: areas.right.avg,
+      top: areas.top.avg,
+      bottom: areas.bottom.avg
+    };
+  };
+
+  // 動きパターンの分析
+  const analyzeMotionPattern = (motion) => {
+    motionHistoryRef.current.push(motion);
+    if (motionHistoryRef.current.length > 15) {
+      motionHistoryRef.current.shift();
+    }
+
+    if (motionHistoryRef.current.length < 5) return null;
+
+    const recent = motionHistoryRef.current.slice(-5);
+    const avg = recent.reduce((a, b) => a + b.overall, 0) / recent.length;
+    const variance = recent.reduce((a, b) => a + Math.pow(b.overall - avg, 2), 0) / recent.length;
+    const isSpike = motion.overall > avg + Math.sqrt(variance) * 2;
+    
+    // 動きの特徴を分析
+    const pattern = {
+      isSpike,
+      isSustained: motion.overall > 10 && avg > 8,
+      isQuick: isSpike && motion.overall > 20,
+      centerDominant: motion.center > motion.left && motion.center > motion.right,
+      horizontalMotion: (motion.left > motion.center * 0.7) || (motion.right > motion.center * 0.7),
+      verticalMotion: (motion.top > 5) || (motion.bottom > 5),
+      leftBias: motion.left > motion.right * 1.3,
+      rightBias: motion.right > motion.left * 1.3
+    };
+
+    return pattern;
+  };
+
+  // イベント判定と実況生成
+  const generateIntelligentCommentary = (motion, pattern) => {
+    const now = Date.now();
+    const timeSinceLastEvent = now - lastEventTimeRef.current;
+    
+    // 最低2秒のインターバル
+    if (timeSinceLastEvent < 2000) return;
+
+    let event = null;
+    let comment = '';
+    let eventType = '';
+
+    // パターンマッチングによるイベント判定
+    if (pattern.isQuick && motion.center > 18) {
+      // 投球・バットスイング
+      if (Math.random() > 0.5) {
+        eventType = 'pitch';
+        const pitchTypes = [
+          'ピッチャー、力強く投げ込んだ! ストライク!',
+          'ピッチャー、キレのある球! いいコースに決まりました!',
+          '投げました! 低めにズバッと!',
+          'ピッチャー、タメを作って... 投げた!',
+        ];
+        comment = pitchTypes[Math.floor(Math.random() * pitchTypes.length)];
+        setGameStats(prev => ({ ...prev, pitches: prev.pitches + 1 }));
+      } else {
+        eventType = 'swing';
+        const swingTypes = [
+          'バッター、思い切り振った! 大きなスイング!',
+          'フルスイング! 力強いバッティング!',
+          '振りました! バットが唸りを上げています!',
+          'バッター、会心の一撃を狙います!',
+        ];
+        comment = swingTypes[Math.floor(Math.random() * swingTypes.length)];
+      }
+      event = { type: eventType, intensity: 'high', motion: motion.overall };
+      
+    } else if (pattern.isSpike && motion.overall > 12) {
+      // ヒット・フィールディング
+      if (pattern.horizontalMotion) {
+        eventType = 'hit';
+        const hitDirections = pattern.leftBias ? 
+          ['打った! レフト方向へ!', '左翼線を抜けていきます!', 'レフトオーバー! 大きな当たり!'] :
+          ['ライト方向へ飛んでいく!', '右中間を破る当たり!', 'ライトフライ、追いかけます!'];
+        comment = hitDirections[Math.floor(Math.random() * hitDirections.length)];
+        setGameStats(prev => ({ ...prev, hits: prev.hits + 1 }));
+        event = { type: eventType, intensity: 'high', motion: motion.overall };
+      } else {
+        eventType = 'catch';
+        const catchTypes = [
+          'ナイスキャッチ! 守備陣、ファインプレー!',
+          'しっかり捕った! 守備の連携、完璧です!',
+          '捕球! アウトにしました!',
+          '守備陣、素早い反応!',
+        ];
+        comment = catchTypes[Math.floor(Math.random() * catchTypes.length)];
+        setGameStats(prev => ({ ...prev, catches: prev.catches + 1 }));
+        event = { type: eventType, intensity: 'medium', motion: motion.overall };
+      }
+      
+    } else if (pattern.isSustained && motion.overall > 8) {
+      // 走塁
+      if (timeSinceLastEvent > 4000) {
+        eventType = 'run';
+        const runTypes = [
+          'ランナー、スピードに乗っています!',
+          '走った! ベースを狙います!',
+          '俊足、見せます! いいスタートです!',
+          'ランナー、次の塁を狙っています!',
+        ];
+        comment = runTypes[Math.floor(Math.random() * runTypes.length)];
+        if (Math.random() > 0.7) {
+          setGameStats(prev => ({ ...prev, runs: prev.runs + 1 }));
+        }
+        event = { type: eventType, intensity: 'medium', motion: motion.overall };
+      }
+      
+    } else if (motion.overall > 4 && timeSinceLastEvent > 5000) {
+      // 準備動作
+      eventType = 'preparation';
+      const prepTypes = [
+        'ピッチャー、サインを確認しています',
+        'バッター、構えました',
+        '守備陣、集中しています',
+        'さあ、次のプレーです',
+        'ランナー、リードを取っています',
+      ];
+      comment = prepTypes[Math.floor(Math.random() * prepTypes.length)];
+      event = { type: eventType, intensity: 'low', motion: motion.overall };
+    }
+
+    if (comment && event) {
+      lastEventTimeRef.current = now;
+      
+      setCommentary(comment);
+      setAllComments(prev => [{
+        time: new Date().toLocaleTimeString('ja-JP'),
+        timestamp: now,
+        text: comment,
+        motion: Math.round(motion.overall),
+        type: eventType
+      }, ...prev.slice(0, 19)]);
+
+      // ハイライト判定（高強度のイベント）
+      if (event.intensity === 'high' && motion.overall > 15) {
+        setHighlights(prev => [...prev, {
+          time: new Date().toLocaleTimeString('ja-JP'),
+          timestamp: now,
+          text: comment,
+          type: eventType,
+          motion: Math.round(motion.overall)
+        }]);
+      }
+
+      // 音声読み上げ
+      if (isSpeechEnabled && 'speechSynthesis' in window) {
+        speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(comment);
+        utterance.lang = 'ja-JP';
+        utterance.rate = 1.15;
+        utterance.pitch = eventType === 'hit' ? 1.2 : 1.0;
+        speechSynthesis.speak(utterance);
+      }
+
+      // 統計更新
+      setGameStats(prev => ({
+        ...prev,
+        totalMotion: prev.totalMotion + motion.overall,
+        peakMotion: Math.max(prev.peakMotion, motion.overall)
+      }));
+    }
+  };
+
+  // 動き検出ループ
+  const motionDetectionLoop = () => {
+    if (!isCommenting) return;
+    
+    const motion = analyzeMotion();
+    const pattern = analyzeMotionPattern(motion);
+    
+    setMotionLevel(motion.overall);
+    
+    if (pattern) {
+      generateIntelligentCommentary(motion, pattern);
+    }
+    
+    animationRef.current = requestAnimationFrame(motionDetectionLoop);
+  };
+
+  // カメラストリームを開始
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment', width: 1280, height: 720 },
+        audio: false 
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+      }
+      streamRef.current = stream;
+      setIsStreaming(true);
+    } catch (err) {
+      alert('カメラへのアクセスが拒否されました: ' + err.message);
+    }
+  };
+
+  // カメラを停止
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    if (durationIntervalRef.current) {
+      clearInterval(durationIntervalRef.current);
+    }
+    setIsStreaming(false);
+    setIsCommenting(false);
+  };
+
+  // 実況開始
+  const startCommentary = () => {
+    if (!isStreaming) {
+      alert('先にカメラを起動してください');
+      return;
+    }
+    setIsCommenting(true);
+    setCommentary('実況を開始します! プレーボール!');
+    setShowDigest(false);
+    
+    // 統計リセット
+    startTimeRef.current = Date.now();
+    setGameStats({
+      pitches: 0,
+      hits: 0,
+      catches: 0,
+      runs: 0,
+      totalMotion: 0,
+      peakMotion: 0,
+      duration: 0
+    });
+    setHighlights([]);
+    
+    // 経過時間カウント
+    durationIntervalRef.current = setInterval(() => {
+      setGameStats(prev => ({
+        ...prev,
+        duration: Math.floor((Date.now() - startTimeRef.current) / 1000)
+      }));
+    }, 1000);
+    
+    if (isSpeechEnabled && 'speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance('実況を開始します! プレーボール!');
+      utterance.lang = 'ja-JP';
+      speechSynthesis.speak(utterance);
+    }
+    
+    previousFrameRef.current = null;
+    motionHistoryRef.current = [];
+    lastEventTimeRef.current = 0;
+    animationRef.current = requestAnimationFrame(motionDetectionLoop);
+  };
+
+  // 実況停止とダイジェスト生成
+  const stopCommentary = () => {
+    setIsCommenting(false);
+    if (animationRef.current) {
+      cancelAnimationFrame(animationRef.current);
+    }
+    if (durationIntervalRef.current) {
+      clearInterval(durationIntervalRef.current);
+    }
+    if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+    
+    // ダイジェスト表示
+    if (highlights.length > 0) {
+      setShowDigest(true);
+      setCommentary('試合終了! ダイジェストを確認できます');
+    }
+  };
+
+  // 音声オンオフ切り替え
+  const toggleSpeech = () => {
+    setIsSpeechEnabled(!isSpeechEnabled);
+    if (!isSpeechEnabled && 'speechSynthesis' in window) {
+      const utterance = new SpeechSynthesisUtterance('音声をオンにしました');
+      utterance.lang = 'ja-JP';
+      speechSynthesis.speak(utterance);
+    } else if ('speechSynthesis' in window) {
+      speechSynthesis.cancel();
+    }
+  };
+
+  // ダイジェストをテキストでダウンロード
+  const downloadDigest = () => {
+    const duration = gameStats.duration;
+    const minutes = Math.floor(duration / 60);
+    const seconds = duration % 60;
+    
+    let digest = '=== 草野球実況ダイジェスト ===\n\n';
+    digest += `試合時間: ${minutes}分${seconds}秒\n`;
+    digest += `投球数: ${gameStats.pitches}球\n`;
+    digest += `ヒット数: ${gameStats.hits}本\n`;
+    digest += `守備プレー: ${gameStats.catches}回\n`;
+    digest += `走塁: ${gameStats.runs}回\n`;
+    digest += `平均動き: ${(gameStats.totalMotion / allComments.length).toFixed(1)}\n`;
+    digest += `最大動き: ${gameStats.peakMotion.toFixed(1)}\n\n`;
+    digest += '=== ハイライト ===\n\n';
+    
+    highlights.forEach((h, i) => {
+      digest += `${i + 1}. [${h.time}] ${h.text} (動き: ${h.motion})\n`;
+    });
+    
+    digest += '\n=== 全実況 ===\n\n';
+    allComments.slice().reverse().forEach((c, i) => {
+      digest += `${i + 1}. [${c.time}] ${c.text}\n`;
+    });
+    
+    const blob = new Blob([digest], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `野球実況_${new Date().toLocaleDateString('ja-JP')}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // クリーンアップ
+  useEffect(() => {
+    return () => {
+      stopCamera();
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+      if (durationIntervalRef.current) {
+        clearInterval(durationIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-green-900 via-green-700 to-green-900 p-4">
+      <div className="max-w-6xl mx-auto">
+        {/* ヘッダー */}
+        <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 mb-4 border border-white/20">
+          <h1 className="text-3xl font-bold text-white mb-2 flex items-center gap-3">
+            <Camera className="w-8 h-8" />
+            草野球リアルタイム実況 PRO
+          </h1>
+          <p className="text-white/80 text-sm">
+            高度な動き検出アルゴリズムで実況生成 + ダイジェスト自動作成
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* 左カラム: カメラと統計 */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* カメラビュー */}
+            <div className="bg-black rounded-2xl overflow-hidden shadow-2xl relative">
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="w-full aspect-video object-cover"
+              />
+              {isCommenting && (
+                <>
+                  <div className="absolute top-4 right-4 bg-red-600 text-white px-3 py-2 rounded-full text-sm font-bold flex items-center gap-2 shadow-lg">
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
+                    実況中 {formatTime(gameStats.duration)}
+                  </div>
+                  <div className="absolute bottom-4 left-4 right-4 bg-gradient-to-r from-black/80 to-black/60 backdrop-blur-sm text-white p-3 rounded-lg">
+                    <div className="text-xs mb-2 flex justify-between items-center">
+                      <span>動き検出レベル</span>
+                      <span className="font-mono font-bold">{Math.round(motionLevel)}</span>
+                    </div>
+                    <div className="h-3 bg-gray-800 rounded-full overflow-hidden">
+                      <div 
+                        className="h-full bg-gradient-to-r from-green-500 via-yellow-400 to-red-500 transition-all duration-200"
+                        style={{ width: `${Math.min(motionLevel * 2.5, 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+            
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+
+            {/* コントロール */}
+            <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20">
+              <div className="flex gap-3 flex-wrap">
+                {!isStreaming ? (
+                  <button
+                    onClick={startCamera}
+                    className="flex-1 min-w-[110px] bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2"
+                  >
+                    <Camera className="w-5 h-5" />
+                    カメラ起動
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopCamera}
+                    className="flex-1 min-w-[110px] bg-red-600 hover:bg-red-700 text-white font-semibold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2"
+                  >
+                    <Square className="w-5 h-5" />
+                    停止
+                  </button>
+                )}
+
+                {!isCommenting ? (
+                  <button
+                    onClick={startCommentary}
+                    disabled={!isStreaming}
+                    className="flex-1 min-w-[110px] bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:opacity-50 text-white font-semibold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2"
+                  >
+                    <Mic className="w-5 h-5" />
+                    実況開始
+                  </button>
+                ) : (
+                  <button
+                    onClick={stopCommentary}
+                    className="flex-1 min-w-[110px] bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2"
+                  >
+                    <Film className="w-5 h-5" />
+                    終了/ダイジェスト
+                  </button>
+                )}
+
+                <button
+                  onClick={toggleSpeech}
+                  className={`min-w-[110px] ${isSpeechEnabled ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-600 hover:bg-gray-700'} text-white font-semibold py-3 px-4 rounded-xl transition flex items-center justify-center gap-2`}
+                >
+                  {isSpeechEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
+                  音声{isSpeechEnabled ? 'ON' : 'OFF'}
+                </button>
+              </div>
+            </div>
+
+            {/* 統計パネル */}
+            {(isCommenting || allComments.length > 0) && (
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/20">
+                <div className="flex items-center gap-2 mb-3">
+                  <BarChart3 className="w-5 h-5 text-white" />
+                  <h3 className="text-lg font-bold text-white">試合統計</h3>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                    <div className="text-xs text-white/60 mb-1">投球数</div>
+                    <div className="text-2xl font-bold text-white">{gameStats.pitches}</div>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                    <div className="text-xs text-white/60 mb-1">ヒット</div>
+                    <div className="text-2xl font-bold text-green-400">{gameStats.hits}</div>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                    <div className="text-xs text-white/60 mb-1">守備</div>
+                    <div className="text-2xl font-bold text-blue-400">{gameStats.catches}</div>
+                  </div>
+                  <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                    <div className="text-xs text-white/60 mb-1">走塁</div>
+                    <div className="text-2xl font-bold text-yellow-400">{gameStats.runs}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* 右カラム: 実況とダイジェスト */}
+          <div className="space-y-4">
+            {/* 現在の実況 */}
+            {commentary && !showDigest && (
+              <div className="bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/30 shadow-xl">
+                <div className="flex items-start gap-3">
+                  <Mic className="w-6 h-6 text-green-400 flex-shrink-0 mt-1 animate-pulse" />
+                  <div className="flex-1">
+                    <h3 className="text-sm font-semibold text-white/70 mb-2">実況中</h3>
+                    <p className="text-lg text-white font-medium leading-relaxed">
+                      {commentary}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ダイジェスト */}
+            {showDigest && highlights.length > 0 && (
+              <div className="bg-gradient-to-br from-yellow-500/20 to-orange-500/20 backdrop-blur-md rounded-2xl p-6 border border-yellow-400/30 shadow-xl">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-6 h-6 text-yellow-400" />
+                    <h3 className="text-xl font-bold text-white">ハイライト</h3>
+                  </div>
+                  <button
+                    onClick={downloadDigest}
+                    className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition"
+                  >
+                    <Download className="w-4 h-4" />
+                    保存
+                  </button>
+                </div>
+                <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                  {highlights.map((h, idx) => (
+                    <div key={idx} className="bg-white/10 rounded-lg p-3 border border-white/20">
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-xs text-yellow-300 font-semibold">#{idx + 1}</span>
+                        <span className="text-xs text-white/60">{h.time}</span>
+                      </div>
+                      <p className="text-white font-medium mb-1">{h.text}</p>
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="text-white/50">{h.type}</span>
+                        <span className="text-yellow-400 font-mono">動き: {h.motion}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 実況履歴 */}
+            {allComments.length > 0 && !showDigest && (
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/20">
+                <h3 className="text-lg font-bold text-white mb-4">実況履歴</h3>
+                <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                  {allComments.map((comment, idx) => (
+                    <div key={idx} className="bg-white/5 rounded-lg p-3 border border-white/10 hover:bg-white/10 transition">
+                      <div className="flex justify-between items-center mb-1">
+                        <div className="text-xs text-white/50">{comment.time}</div>
+                        <div className="flex items-center gap-2">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            comment.type === 'hit' ? 'bg-green-500/30 text-green-300' :
+                            comment.type === 'pitch' ? 'bg-blue-500/30 text-blue-300' :
+                            comment.type === 'catch' ? 'bg-purple-500/30 text-purple-300' :
+                            comment.type === 'run' ? 'bg-yellow-500/30 text-yellow-300' :
+                            'bg-gray-500/30 text-gray-300'
+                          }`}>
+                            {comment.type}
+                          </span>
+                          <span className="text-xs text-green-400 font-mono">{comment.motion}</span>
+                        </div>
+                      </div>
+                      <div className="text-white/90">{comment.text}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 説明 */}
+        <div className="mt-4 bg-white/5 backdrop-blur-md rounded-xl p-4 border border-white/10">
+          <p className="text-white/70 text-sm leading-relaxed">
+            <strong className="text-white">🔬 高度なアルゴリズム:</strong><br />
+            • エリア別動き検出（中央・左右・上下）<br />
+            • 動きパターン分析（スパイク・持続・方向性）<br />
+            • イベント判定（投球・打撃・守備・走塁）<br />
+            • 自動ハイライト抽出<br />
+            <br />
+            <strong className="text-yellow-300">📊 機能:</strong><br />
+            リアルタイム実況 | 試合統計 | ハイライト自動生成 | ダイジェストダウンロード
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
-
-function checkAllStopped(){ // called after each column finalizes
-  // if any spinIntervals still running or scheduledStops exist, not all stopped
-  const anyRunning = spinIntervals.some(x=>x!==null);
-  if(anyRunning) return; // wait until all
-  // all columns stopped -> evaluate
-  spinningFlag = false; spinBtn.disabled = false; stopBtn.disabled = true;
-  // evaluate
-  const evalRes = evaluateGrid(gridSymbols);
-  let gain = evalRes.totalGain; let ticketsG = evalRes.tickets; const luck = state.charms.find(c=>c.id==='luck'&&c.owned); if(luck) gain = Math.floor(gain*1.2);
-  state.coins += gain; state.tickets += ticketsG; renderHUD();
-  // mark winning cells
-  evalRes.lines.forEach(line=>{ line.cells.forEach(([r,c])=>cells[r][c].classList.add('win')); });
-  // floating big gain
-  if(gain>0) showGainOverlay(gain);
-  // decrement spins left
-  state.spinsLeft = Math.max(0, state.spinsLeft - 1);
-  renderHUD();
-  if(state.spinsLeft===0){ messageBox('スピン終了。ATMで目標を満たすか確認してください'); }
-}
-
-// ----- stop button handler -----
-stopBtn.addEventListener('click', ()=>{ expediteStops(); });
-
-// ----- utility: show big gain overlay -----
-let gainTimer = null;
-function showGainOverlay(amount){ gainOverlay.textContent = '+' + amount + ' Φ'; gainOverlay.classList.add('show'); playTone(880,0.18); if(gainTimer) clearTimeout(gainTimer); gainTimer = setTimeout(()=>{ gainOverlay.classList.remove('show'); },1400); }
-
-// ----- reroll functions -----
-function toggleCellSelection(r,c){ const key=r+','+c; if(selectedCells.has(key)){ selectedCells.delete(key); cells[r][c].classList.remove('selected'); } else { selectedCells.add(key); cells[r][c].classList.add('selected'); } }
-function clearSelection(){ selectedCells.forEach(k=>{ const [r,c]=k.split(',').map(Number); cells[r][c].classList.remove('selected'); }); selectedCells.clear(); }
-function rerollSelected(){ if(selectedCells.size===0){ messageBox('セルが選択されていません'); return; } const costPer=1; const need = costPer * selectedCells.size; if(state.tickets < need){ messageBox('チケットが足りません'); return; } state.tickets -= need; selectedCells.forEach(k=>{ const [r,c]=k.split(',').map(Number); const sym = weightedRandomSymbol(); gridSymbols[r][c]=sym; cells[r][c].querySelector('.sym').textContent=sym; cells[r][c].classList.add('flash'); setTimeout(()=>cells[r][c].classList.remove('flash'),360); }); // evaluate
-  const evalRes = evaluateGrid(gridSymbols); let gain = evalRes.totalGain; let ticketsG = evalRes.tickets; const luck = state.charms.find(c=>c.id==='luck'&&c.owned); if(luck) gain = Math.floor(gain*1.2); state.coins += gain; state.tickets += ticketsG; evalRes.lines.forEach(line=>{ line.cells.forEach(([r,c])=>cells[r][c].classList.add('win')); }); clearSelection(); renderHUD(); messageBox('リロール完了（消費 ' + need + 'T）'); log('リロール: ' + need + 'T'); }
-function rerollAll(){ const cost=3; if(state.tickets < cost){ messageBox('チケットが足りません'); return; } state.tickets -= cost; for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ const sym=weightedRandomSymbol(); gridSymbols[r][c]=sym; cells[r][c].querySelector('.sym').textContent=sym; cells[r][c].classList.add('flash'); setTimeout(()=>cells[r][c].classList.remove('flash'),360); } } const evalRes=evaluateGrid(gridSymbols); let gain=evalRes.totalGain; let ticketsG=evalRes.tickets; const luck=state.charms.find(c=>c.id==='luck'&&c.owned); if(luck) gain=Math.floor(gain*1.2); state.coins+=gain; state.tickets+=ticketsG; evalRes.lines.forEach(line=>{ line.cells.forEach(([r,c])=>cells[r][c].classList.add('win')); }); renderHUD(); messageBox('盤面リロール（消費 3T）'); log('盤面リロール'); }
-
-// ----- evaluate grid -----
-function evaluateGrid(g){ const dirs=[[0,1],[1,0],[1,1],[1,-1]]; const lines=[]; let totalGain=0; let tickets=0; for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ const sym=g[r][c]; dirs.forEach(dir=>{ const seq=[[r,c]]; let rr=r+dir[0], cc=c+dir[1]; while(rr>=0 && rr<ROWS && cc>=0 && cc<COLS && g[rr][cc]===sym){ seq.push([rr,cc]); rr+=dir[0]; cc+=dir[1]; } if(seq.length>=3){ const key=seq.map(x=>x.join(',')).join('|'); if(!lines.some(l=>l.key===key)){ lines.push({key,symbol:sym,length:seq.length,cells:seq}); const base=BASE_VALUES[sym]||5; const multiplier = seq.length===3?1:seq.length===4?1.8:3.5; totalGain += Math.floor(base*multiplier); if(seq.length>=4) tickets += (seq.length-3); } } }); } } return {lines,totalGain,tickets}; }
-
-// ----- ATM / round advancement -----
-function attemptAdvance(){ if(state.coins >= state.atmTarget){ state.coins -= state.atmTarget; state.debt = Math.max(0, state.debt - state.atmTarget); const bonusTickets = Math.max(0, Math.floor(state.spinsChosen/3)); state.tickets += bonusTickets; const interest = state.charms.find(c=>c.id==='interest'&&c.owned); if(interest){ const bonus = Math.floor(state.coins * 0.05); state.coins += bonus; log('利子ボーナス +' + bonus); messageBox('利子ボーナス +' + bonus); } messageBox('ATM払済。次ラウンドへ。チケット+' + bonusTickets); log('ATM支払い成功'); state.debt += 30 + Math.floor(Math.random()*40); startRound(); renderHUD(); } else { const shield = state.charms.find(c=>c.id==='shield'&&c.owned); if(shield){ state.debt += 10; const sc = state.charms.find(c=>c.id==='shield'); if(sc) sc.owned=false; messageBox('Shield が発動して借金増加を軽減しました'); log('Shield used'); } else { state.debt += 20 + Math.floor(Math.random()*30); messageBox('支払い失敗。借金が増えました...'); log('ATM未払い: 借金増加'); } renderHUD(); } }
-
-// ----- UI button wiring -----
-spinBtn.addEventListener('click', ()=>startSpin()); stopBtn.addEventListener('click', ()=>expediteStops()); autoResolve.addEventListener('click', ()=>{ while(state.spinsLeft>0){ const ok=spinOnceImmediate(); if(!ok) break; } messageBox('全スピン解決'); renderHUD(); });
-rerollBtn.addEventListener('click', ()=>{ rerollSelected(); }); rerollAllBtn.addEventListener('click', ()=>{ rerollAll(); });
-payATM.addEventListener('click', ()=>{ attemptAdvance(); renderHUD(); });
-partialPay.addEventListener('click', ()=>{ const amt = Math.min(state.coins, Math.floor(state.atmTarget/2)); if(amt<=0){ messageBox('支払うコインがありません'); return; } state.coins -= amt; state.debt = Math.max(0, state.debt - amt); messageBox('一部支払いしました: ' + amt); renderHUD(); });
-saveBtn.addEventListener('click', ()=>{ localStorage.setItem('cp_clone_v4', JSON.stringify(state)); messageBox('セーブしました'); });
-loadBtn.addEventListener('click', ()=>{ const d = localStorage.getItem('cp_clone_v4'); if(!d){ messageBox('保存データがありません'); return; } try{ const p = JSON.parse(d); state.coins = p.coins||state.coins; state.tickets = p.tickets||state.tickets; state.debt = p.debt||state.debt; state.bet = p.bet||state.bet; if(Array.isArray(p.charms)){ p.charms.forEach(pc=>{ const sc = state.charms.find(x=>x.id===pc.id); if(sc) sc.owned = !!pc.owned; }); } renderHUD(); renderCharms(); renderShop(); messageBox('ロードしました'); } catch(e){ messageBox('ロード失敗'); } });
-nextRoundBtn.addEventListener('click', ()=>{ startRound(); renderHUD(); });
-
-// keyboard
-window.addEventListener('keydown', function(e){ if(e.code==='Space'){ e.preventDefault(); spinBtn.click(); } if(e.key==='h' || e.key==='H'){ state.tickets++; messageBox('デバッグ: チケット+1'); renderHUD(); } });
-
-// ----- instant spin (used for autoResolve) -----
-function spinOnceImmediate(){ if(state.spinsLeft <=0){ startRound(); renderHUD(); }
-  const bet = Math.max(1, Math.floor(Number(betInput.value) || state.bet)); state.bet = bet; if(state.coins < bet){ messageBox('コインが足りません'); return false; } state.coins -= bet; for(let r=0;r<ROWS;r++){ for(let c=0;c<COLS;c++){ const sym=weightedRandomSymbol(); gridSymbols[r][c]=sym; cells[r][c].querySelector('.sym').textContent = sym; } } const evalRes = evaluateGrid(gridSymbols); let gain = evalRes.totalGain; let ticketsG = evalRes.tickets; const luck = state.charms.find(c=>c.id==='luck'&&c.owned); if(luck) gain = Math.floor(gain*1.2); state.coins += gain; state.tickets += ticketsG; evalRes.lines.forEach(line=>{ line.cells.forEach(([r,c])=>cells[r][c].classList.add('win')); }); state.spinsLeft = Math.max(0, state.spinsLeft - 1); renderHUD(); if(gain>0) showGainOverlay(gain); return true; }
-
-// ----- 初期化 -----
-initBoard(); renderHUD(); renderCharms(); renderShop(); startRound();
-</script>
-</body>
-</html>
-
